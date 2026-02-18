@@ -1,0 +1,119 @@
+{
+  "feature_names": [
+    "loan_amnt",
+    "int_rate",
+    "installment",
+    "annual_inc",
+    "dti",
+    "delinq_2yrs",
+    "fico_range_low",
+    "inq_last_6mths",
+    "open_acc",
+    "pub_rec",
+    "revol_bal",
+    "revol_util",
+    "total_acc",
+    "mort_acc",
+    "pub_rec_bankruptcies"
+  ],
+  "feature_shap_importance": [
+    {
+      "feature": "int_rate",
+      "mean_abs_shap": 0.523284
+    },
+    {
+      "feature": "loan_amnt",
+      "mean_abs_shap": 0.184524
+    },
+    {
+      "feature": "fico_range_low",
+      "mean_abs_shap": 0.13787
+    },
+    {
+      "feature": "dti",
+      "mean_abs_shap": 0.10404
+    },
+    {
+      "feature": "annual_inc",
+      "mean_abs_shap": 0.09933
+    },
+    {
+      "feature": "mort_acc",
+      "mean_abs_shap": 0.091654
+    },
+    {
+      "feature": "revol_bal",
+      "mean_abs_shap": 0.079715
+    },
+    {
+      "feature": "installment",
+      "mean_abs_shap": 0.07223
+    },
+    {
+      "feature": "open_acc",
+      "mean_abs_shap": 0.068559
+    },
+    {
+      "feature": "inq_last_6mths",
+      "mean_abs_shap": 0.058227
+    },
+    {
+      "feature": "revol_util",
+      "mean_abs_shap": 0.024667
+    },
+    {
+      "feature": "pub_rec",
+      "mean_abs_shap": 0.009966
+    },
+    {
+      "feature": "pub_rec_bankruptcies",
+      "mean_abs_shap": 0.009737
+    },
+    {
+      "feature": "delinq_2yrs",
+      "mean_abs_shap": 0.008005
+    },
+    {
+      "feature": "total_acc",
+      "mean_abs_shap": 0.007021
+    }
+  ],
+  "risk_thresholds": {
+    "Low": [
+      0.0,
+      0.3
+    ],
+    "Medium": [
+      0.3,
+      0.55
+    ],
+    "High": [
+      0.55,
+      0.75
+    ],
+    "Critical": [
+      0.75,
+      1.01
+    ]
+  },
+  "metrics": {
+    "logistic_regression": {
+      "ROC-AUC": 0.6837,
+      "PR-AUC": 0.1485,
+      "Brier": 0.233,
+      "F1": 0.2081
+    },
+    "xgboost": {
+      "ROC-AUC": 0.6972,
+      "PR-AUC": 0.1582,
+      "Brier": 0.2224,
+      "F1": 0.2131
+    },
+    "xgboost_calibrated": {
+      "ROC-AUC": 0.6972,
+      "PR-AUC": 0.1582,
+      "Brier": 0.0806,
+      "F1": 0.0252
+    }
+  }
+}

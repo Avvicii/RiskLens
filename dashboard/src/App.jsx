@@ -1,0 +1,920 @@
+import { useState, useEffect, useRef } from "react";
+
+// ─── DESIGN SYSTEM ────────────────────────────────────────────────────────────
+// Aesthetic: Bloomberg Terminal × Modern Fintech
+// Dark slate base, amber data accents, red risk signals
+// Fonts: DM Mono for data, Syne for headings
+// ──────────────────────────────────────────────────────────────────────────────
+
+const API_BASE = "http://127.0.0.1:8000";
+
+const STYLES = `
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:ital,wght@0,300;0,400;0,500;1,400&family=Syne:wght@400;600;700;800&display=swap');
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg-0: #080c10;
+    --bg-1: #0d1117;
+    --bg-2: #161b22;
+    --bg-3: #1c2330;
+    --border: #21262d;
+    --border-bright: #30363d;
+    --text-primary: #e6edf3;
+    --text-secondary: #7d8590;
+    --text-muted: #484f58;
+    --amber: #f0a84b;
+    --amber-dim: #7a5520;
+    --amber-glow: rgba(240,168,75,0.12);
+    --green: #3fb950;
+    --green-dim: #1a4a23;
+    --red: #f85149;
+    --red-dim: #5a1a1a;
+    --red-glow: rgba(248,81,73,0.12);
+    --yellow: #d29922;
+    --blue: #58a6ff;
+    --mono: 'DM Mono', monospace;
+    --sans: 'Syne', sans-serif;
+  }
+
+  html, body, #root {
+    height: 100%;
+    background: var(--bg-0);
+    color: var(--text-primary);
+    font-family: var(--mono);
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg-1); }
+  ::-webkit-scrollbar-thumb { background: var(--border-bright); border-radius: 2px; }
+
+  /* Animations */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes scanline {
+    0%   { transform: translateY(-100%); }
+    100% { transform: translateY(100vh); }
+  }
+  @keyframes pulse-dot {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: 0.3; }
+  }
+  @keyframes fillBar {
+    from { width: 0; }
+    to   { width: var(--target-width); }
+  }
+  @keyframes countUp {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes gaugeSweep {
+    from { stroke-dashoffset: 220; }
+    to   { stroke-dashoffset: var(--target-offset); }
+  }
+  @keyframes borderPulse {
+    0%, 100% { border-color: var(--red); }
+    50%       { border-color: var(--red-dim); }
+  }
+
+  .app {
+    min-height: 100vh;
+    display: grid;
+    grid-template-rows: auto 1fr;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Scanline effect */
+  .app::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(240,168,75,0.15), transparent);
+    animation: scanline 8s linear infinite;
+    pointer-events: none;
+    z-index: 100;
+  }
+
+  /* Header */
+  .header {
+    border-bottom: 1px solid var(--border);
+    padding: 0 32px;
+    height: 52px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-1);
+    position: sticky;
+    top: 0;
+    z-index: 50;
+  }
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  .logo {
+    font-family: var(--sans);
+    font-weight: 800;
+    font-size: 15px;
+    letter-spacing: -0.02em;
+    color: var(--text-primary);
+  }
+  .logo span { color: var(--amber); }
+  .divider-v {
+    width: 1px;
+    height: 20px;
+    background: var(--border-bright);
+  }
+  .header-sub {
+    color: var(--text-secondary);
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .status-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--green);
+    animation: pulse-dot 2s ease-in-out infinite;
+  }
+  .status-dot.offline { background: var(--red); animation: none; }
+  .status-label {
+    font-size: 11px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* Main layout */
+  .main {
+    display: grid;
+    grid-template-columns: 420px 1fr;
+    height: calc(100vh - 52px);
+    overflow: hidden;
+  }
+
+  /* Left panel — inputs */
+  .panel-left {
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    background: var(--bg-1);
+  }
+  .panel-header {
+    padding: 16px 20px 12px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    background: var(--bg-1);
+    z-index: 10;
+  }
+  .panel-title {
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+  .section-group {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .section-label {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--amber);
+    margin-bottom: 12px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-label::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--amber-dim);
+  }
+  .field-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .field.full { grid-column: 1 / -1; }
+  .field label {
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .field input {
+    background: var(--bg-0);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 7px 10px;
+    color: var(--text-primary);
+    font-family: var(--mono);
+    font-size: 13px;
+    transition: border-color 0.15s;
+    width: 100%;
+    outline: none;
+  }
+  .field input:focus {
+    border-color: var(--amber);
+    box-shadow: 0 0 0 2px var(--amber-glow);
+  }
+  .field input:hover:not(:focus) {
+    border-color: var(--border-bright);
+  }
+
+  .submit-btn {
+    margin: 16px 20px;
+    width: calc(100% - 40px);
+    padding: 12px;
+    background: var(--amber);
+    color: var(--bg-0);
+    border: none;
+    border-radius: 3px;
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: 13px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+    overflow: hidden;
+  }
+  .submit-btn:hover:not(:disabled) {
+    background: #f5c06a;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 20px var(--amber-glow);
+  }
+  .submit-btn:active:not(:disabled) { transform: translateY(0); }
+  .submit-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  .submit-btn.loading::after {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%;
+    width: 60%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+    animation: shimmer 1s ease infinite;
+  }
+  @keyframes shimmer {
+    to { left: 140%; }
+  }
+
+  /* Right panel — results */
+  .panel-right {
+    overflow-y: auto;
+    background: var(--bg-0);
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+
+  /* Empty state */
+  .empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    color: var(--text-muted);
+    animation: fadeUp 0.4s ease;
+  }
+  .empty-icon {
+    width: 48px; height: 48px;
+    border: 1px solid var(--border-bright);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+  }
+  .empty-state p {
+    font-size: 12px;
+    letter-spacing: 0.04em;
+  }
+
+  /* Score card */
+  .score-card {
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    animation: fadeUp 0.3s ease;
+  }
+  .score-card.critical { border-color: var(--red); animation: fadeUp 0.3s ease, borderPulse 2s ease infinite; }
+  .score-card.high     { border-color: var(--yellow); }
+  .score-card.medium   { border-color: var(--amber); }
+  .score-card.low      { border-color: var(--green); }
+
+  .score-header {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--bg-2);
+  }
+  .score-label {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+  .risk-badge {
+    padding: 3px 10px;
+    border-radius: 2px;
+    font-family: var(--sans);
+    font-weight: 700;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .risk-badge.Low      { background: var(--green-dim);  color: var(--green);  }
+  .risk-badge.Medium   { background: var(--amber-dim);  color: var(--amber);  }
+  .risk-badge.High     { background: rgba(210,153,34,0.2); color: var(--yellow); }
+  .risk-badge.Critical { background: var(--red-dim);    color: var(--red);    }
+
+  .score-body {
+    padding: 24px 20px;
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 24px;
+    align-items: center;
+  }
+
+  /* Gauge */
+  .gauge-wrap { position: relative; width: 140px; height: 80px; }
+  .gauge-svg { overflow: visible; }
+  .gauge-bg   { fill: none; stroke: var(--bg-3); stroke-width: 10; stroke-linecap: round; }
+  .gauge-fill { fill: none; stroke-width: 10; stroke-linecap: round; transition: stroke-dashoffset 1s cubic-bezier(0.4,0,0.2,1); }
+  .gauge-value {
+    position: absolute;
+    bottom: 0; left: 50%;
+    transform: translateX(-50%);
+    font-family: var(--sans);
+    font-weight: 800;
+    font-size: 28px;
+    letter-spacing: -0.04em;
+    line-height: 1;
+  }
+  .gauge-pct {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .score-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .meta-row {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .meta-key {
+    font-size: 10px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .meta-val {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 16px;
+  }
+
+  /* SHAP chart */
+  .chart-card {
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    animation: fadeUp 0.4s ease 0.1s both;
+  }
+  .chart-header {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-2);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .chart-title {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+  .chart-legend {
+    display: flex;
+    gap: 14px;
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+  .legend-dot {
+    display: inline-block;
+    width: 8px; height: 8px;
+    border-radius: 1px;
+    margin-right: 4px;
+    vertical-align: middle;
+  }
+  .chart-body { padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; }
+
+  .shap-row {
+    display: grid;
+    grid-template-columns: 140px 1fr 60px;
+    gap: 10px;
+    align-items: center;
+  }
+  .shap-feature {
+    font-size: 11px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    text-align: right;
+  }
+  .shap-bar-track {
+    height: 18px;
+    background: var(--bg-0);
+    border-radius: 2px;
+    overflow: hidden;
+    display: flex;
+    position: relative;
+  }
+  .shap-bar {
+    height: 100%;
+    border-radius: 2px;
+    position: absolute;
+    animation: fillBar 0.8s cubic-bezier(0.4,0,0.2,1) both;
+  }
+  .shap-val {
+    font-size: 11px;
+    color: var(--text-secondary);
+    text-align: right;
+  }
+  .shap-val.pos { color: var(--red); }
+  .shap-val.neg { color: var(--green); }
+
+  /* Detail grid */
+  .detail-grid {
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+    animation: fadeUp 0.4s ease 0.2s both;
+  }
+  .detail-header {
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-2);
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+  }
+  .detail-table {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+  }
+  .detail-cell {
+    padding: 12px 16px;
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
+  .detail-cell:nth-child(3n) { border-right: none; }
+  .detail-key {
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-muted);
+  }
+  .detail-val {
+    font-family: var(--sans);
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--text-primary);
+  }
+
+  /* Error */
+  .error-card {
+    background: var(--red-dim);
+    border: 1px solid var(--red);
+    border-radius: 6px;
+    padding: 14px 18px;
+    font-size: 12px;
+    color: var(--red);
+    animation: fadeUp 0.3s ease;
+    display: flex;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .error-icon { font-size: 16px; flex-shrink: 0; }
+`;
+
+// ─── CONSTANTS ────────────────────────────────────────────────────────────────
+const FIELD_GROUPS = [
+  {
+    label: "Loan Details",
+    fields: [
+      { key: "loan_amnt",    label: "Loan Amount ($)",     default: 10000 },
+      { key: "int_rate",     label: "Interest Rate (%)",   default: 12.5 },
+      { key: "installment",  label: "Installment ($/mo)",  default: 350 },
+    ],
+  },
+  {
+    label: "Borrower Profile",
+    fields: [
+      { key: "annual_inc",   label: "Annual Income ($)",   default: 65000 },
+      { key: "dti",          label: "Debt-to-Income (%)",  default: 18.0 },
+      { key: "fico_range_low", label: "FICO Score (Low)", default: 700 },
+    ],
+  },
+  {
+    label: "Credit History",
+    fields: [
+      { key: "delinq_2yrs",        label: "Delinquencies (2yr)",   default: 0 },
+      { key: "inq_last_6mths",     label: "Inquiries (6mo)",       default: 1 },
+      { key: "open_acc",           label: "Open Accounts",         default: 10 },
+      { key: "pub_rec",            label: "Public Records",        default: 0 },
+      { key: "pub_rec_bankruptcies", label: "Bankruptcies",        default: 0 },
+    ],
+  },
+  {
+    label: "Revolving Credit",
+    fields: [
+      { key: "revol_bal",   label: "Revolving Balance ($)", default: 8000 },
+      { key: "revol_util",  label: "Utilization (%)",       default: 40.0 },
+      { key: "total_acc",   label: "Total Accounts",        default: 20 },
+      { key: "mort_acc",    label: "Mortgage Accounts",     default: 1 },
+    ],
+  },
+];
+
+const RISK_COLORS = {
+  Low:      "#3fb950",
+  Medium:   "#f0a84b",
+  High:     "#d29922",
+  Critical: "#f85149",
+};
+
+const formatNum = (v, key) => {
+  if (["loan_amnt", "annual_inc", "installment", "revol_bal"].includes(key))
+    return "$" + Number(v).toLocaleString();
+  if (["int_rate", "dti", "revol_util"].includes(key))
+    return Number(v).toFixed(1) + "%";
+  return v;
+};
+
+// ─── GAUGE ────────────────────────────────────────────────────────────────────
+function Gauge({ score, category }) {
+  const r = 54;
+  const circ = Math.PI * r;         // half circle circumference ≈ 169.6
+  const offset = circ * (1 - score); // 0 = full, circ = empty
+  const color = RISK_COLORS[category] || "#f0a84b";
+
+  return (
+    <div className="gauge-wrap">
+      <svg className="gauge-svg" width="140" height="80" viewBox="-10 -10 160 90">
+        <path
+          className="gauge-bg"
+          d={`M 10,70 A ${r},${r} 0 0,1 130,70`}
+        />
+        <path
+          className="gauge-fill"
+          d={`M 10,70 A ${r},${r} 0 0,1 130,70`}
+          stroke={color}
+          strokeDasharray={circ}
+          strokeDashoffset={offset * circ / circ * circ}
+          style={{
+            strokeDashoffset: offset,
+            filter: `drop-shadow(0 0 6px ${color}80)`,
+            transition: "stroke-dashoffset 1.2s cubic-bezier(0.4,0,0.2,1)",
+          }}
+        />
+      </svg>
+      <div className="gauge-value" style={{ color }}>
+        {Math.round(score * 100)}
+        <span className="gauge-pct">%</span>
+      </div>
+    </div>
+  );
+}
+
+// ─── SHAP BAR ─────────────────────────────────────────────────────────────────
+function ShapBar({ feature, impact, maxImp, delay }) {
+  const pct = Math.abs(impact) / maxImp * 100;
+  const isPos = impact > 0;
+  const color = isPos ? "#f85149" : "#3fb950";
+  const mid = 50;
+
+  return (
+    <div className="shap-row" style={{ animationDelay: `${delay}ms` }}>
+      <div className="shap-feature" title={feature}>{feature.replace(/_/g, "_\u200b")}</div>
+      <div className="shap-bar-track">
+        {/* center line */}
+        <div style={{
+          position: "absolute", left: "50%", top: 0,
+          width: "1px", height: "100%",
+          background: "var(--border-bright)", zIndex: 1,
+        }} />
+        <div
+          className="shap-bar"
+          style={{
+            background: color,
+            opacity: 0.85,
+            width: `${pct / 2}%`,
+            left: isPos ? "50%" : `${mid - pct / 2}%`,
+            "--target-width": `${pct / 2}%`,
+            animationDelay: `${delay}ms`,
+            boxShadow: `0 0 8px ${color}60`,
+          }}
+        />
+      </div>
+      <div className={`shap-val ${isPos ? "pos" : "neg"}`}>
+        {isPos ? "+" : ""}{impact.toFixed(3)}
+      </div>
+    </div>
+  );
+}
+
+// ─── MAIN APP ─────────────────────────────────────────────────────────────────
+export default function App() {
+  const initialValues = Object.fromEntries(
+    FIELD_GROUPS.flatMap(g => g.fields.map(f => [f.key, f.default]))
+  );
+
+  const [values, setValues]     = useState(initialValues);
+  const [result, setResult]     = useState(null);
+  const [loading, setLoading]   = useState(false);
+  const [error, setError]       = useState(null);
+  const [apiOnline, setApiOnline] = useState(null);
+
+  // Health check
+  useEffect(() => {
+    fetch(`${API_BASE}/health`)
+      .then(r => r.json())
+      .then(d => setApiOnline(d.model_loaded))
+      .catch(() => setApiOnline(false));
+  }, []);
+
+  const handleChange = (key, val) => {
+    setValues(v => ({ ...v, [key]: val }));
+  };
+
+  const handleSubmit = async () => {
+    setLoading(true);
+    setError(null);
+    setResult(null);
+
+    const payload = Object.fromEntries(
+      Object.entries(values).map(([k, v]) => [k, parseFloat(v) || 0])
+    );
+
+    try {
+      const res = await fetch(`${API_BASE}/predict`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || `HTTP ${res.status}`);
+      }
+      const data = await res.json();
+      setResult(data);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadHighRisk = () => setValues({
+    loan_amnt: 25000, int_rate: 24.9, installment: 720,
+    annual_inc: 38000, dti: 35.2, fico_range_low: 640,
+    delinq_2yrs: 3, inq_last_6mths: 5, open_acc: 6,
+    pub_rec: 1, revol_bal: 18000, revol_util: 88,
+    total_acc: 12, mort_acc: 0, pub_rec_bankruptcies: 1,
+  });
+
+  const loadLowRisk = () => setValues({
+    loan_amnt: 8000, int_rate: 6.5, installment: 180,
+    annual_inc: 120000, dti: 7.2, fico_range_low: 790,
+    delinq_2yrs: 0, inq_last_6mths: 0, open_acc: 18,
+    pub_rec: 0, revol_bal: 3200, revol_util: 12,
+    total_acc: 32, mort_acc: 2, pub_rec_bankruptcies: 0,
+  });
+
+  const maxImp = result
+    ? Math.max(...result.top_features.map(f => Math.abs(f.impact)))
+    : 1;
+
+  return (
+    <>
+      <style>{STYLES}</style>
+      <div className="app">
+
+        {/* ── HEADER ── */}
+        <header className="header">
+          <div className="header-left">
+            <div className="logo">RISK<span>LENS</span></div>
+            <div className="divider-v" />
+            <div className="header-sub">Credit Default Predictor · v1.0</div>
+          </div>
+          <div className="status-label">
+            <div className={`status-dot ${apiOnline === false ? "offline" : ""}`} />
+            {apiOnline === null ? "Connecting…"
+             : apiOnline ? "Model loaded · API online"
+             : "API offline — run uvicorn"}
+          </div>
+        </header>
+
+        {/* ── MAIN ── */}
+        <div className="main">
+
+          {/* ── LEFT: INPUT FORM ── */}
+          <aside className="panel-left">
+            <div className="panel-header">
+              <div className="panel-title">Loan Application</div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button
+                  onClick={loadLowRisk}
+                  style={{
+                    background: "var(--green-dim)", color: "var(--green)",
+                    border: "1px solid var(--green)", borderRadius: 3,
+                    padding: "3px 8px", fontSize: 10, cursor: "pointer",
+                    fontFamily: "var(--mono)", letterSpacing: "0.06em",
+                  }}>LOW RISK</button>
+                <button
+                  onClick={loadHighRisk}
+                  style={{
+                    background: "var(--red-dim)", color: "var(--red)",
+                    border: "1px solid var(--red)", borderRadius: 3,
+                    padding: "3px 8px", fontSize: 10, cursor: "pointer",
+                    fontFamily: "var(--mono)", letterSpacing: "0.06em",
+                  }}>HIGH RISK</button>
+              </div>
+            </div>
+
+            {FIELD_GROUPS.map(group => (
+              <div className="section-group" key={group.label}>
+                <div className="section-label">{group.label}</div>
+                <div className="field-grid">
+                  {group.fields.map(f => (
+                    <div className={`field ${group.fields.length === 3 && group.fields.indexOf(f) === 2 ? "full" : ""}`} key={f.key}>
+                      <label>{f.label}</label>
+                      <input
+                        type="number"
+                        value={values[f.key]}
+                        onChange={e => handleChange(f.key, e.target.value)}
+                        step="any"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+
+            <button
+              className={`submit-btn${loading ? " loading" : ""}`}
+              onClick={handleSubmit}
+              disabled={loading || apiOnline === false}
+            >
+              {loading ? "Analyzing…" : "Run Risk Analysis →"}
+            </button>
+          </aside>
+
+          {/* ── RIGHT: RESULTS ── */}
+          <main className="panel-right">
+            {error && (
+              <div className="error-card">
+                <span className="error-icon">⚠</span>
+                <div>
+                  <div style={{ fontFamily: "var(--sans)", fontWeight: 700, marginBottom: 4 }}>
+                    Prediction Failed
+                  </div>
+                  <div style={{ opacity: 0.8 }}>{error}</div>
+                </div>
+              </div>
+            )}
+
+            {!result && !error && (
+              <div className="empty-state">
+                <div className="empty-icon">⬡</div>
+                <p>Enter loan details and run analysis</p>
+                <p style={{ fontSize: 11, opacity: 0.5 }}>
+                  or load a sample with the buttons above
+                </p>
+              </div>
+            )}
+
+            {result && (
+              <>
+                {/* ── SCORE CARD ── */}
+                <div className={`score-card ${result.risk_category.toLowerCase()}`}>
+                  <div className="score-header">
+                    <div className="score-label">Default Probability Assessment</div>
+                    <div className={`risk-badge ${result.risk_category}`}>
+                      {result.risk_category} Risk
+                    </div>
+                  </div>
+                  <div className="score-body">
+                    <Gauge score={result.risk_score} category={result.risk_category} />
+                    <div className="score-meta">
+                      <div className="meta-row">
+                        <div className="meta-key">P(Default)</div>
+                        <div className="meta-val" style={{ color: RISK_COLORS[result.risk_category], fontSize: 26, fontFamily: "var(--sans)", fontWeight: 800 }}>
+                          {(result.risk_score * 100).toFixed(1)}%
+                        </div>
+                      </div>
+                      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                        {[
+                          ["Category", result.risk_category],
+                          ["Model", "XGBoost + Platt"],
+                          ["Features", result.top_features.length + " drivers"],
+                          ["Version", result.api_version || "1.0.0"],
+                        ].map(([k, v]) => (
+                          <div className="meta-row" key={k}>
+                            <div className="meta-key">{k}</div>
+                            <div className="meta-val" style={{ fontSize: 13 }}>{v}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── SHAP CHART ── */}
+                <div className="chart-card">
+                  <div className="chart-header">
+                    <div className="chart-title">Feature Impact (SHAP Values)</div>
+                    <div className="chart-legend">
+                      <span><span className="legend-dot" style={{ background: "#f85149" }} />Increases risk</span>
+                      <span><span className="legend-dot" style={{ background: "#3fb950" }} />Reduces risk</span>
+                    </div>
+                  </div>
+                  <div className="chart-body">
+                    {result.top_features.map((f, i) => (
+                      <ShapBar
+                        key={f.feature}
+                        feature={f.feature}
+                        impact={f.impact}
+                        maxImp={maxImp}
+                        delay={i * 80}
+                      />
+                    ))}
+                  </div>
+                </div>
+
+                {/* ── INPUT ECHO ── */}
+                <div className="detail-grid">
+                  <div className="detail-header">Input Features Used</div>
+                  <div className="detail-table">
+                    {Object.entries(result.input_features).map(([k, v]) => (
+                      <div className="detail-cell" key={k}>
+                        <div className="detail-key">{k.replace(/_/g, " ")}</div>
+                        <div className="detail-val">{formatNum(v, k)}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </main>
+        </div>
+      </div>
+    </>
+  );
+}
